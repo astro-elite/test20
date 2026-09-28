@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Space Tracker | Koinot Kuzatuvchisi</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+/* ============================================================
+   1. RESET & TOKENS
+============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep:   #020509;
+  --bg-card:   rgba(8, 14, 24, 0.4);
+  --bg-inner:  rgba(255, 255, 255, 0.04);
+  --cyan:      #4fd8ff;
+  --blue:      #2f7fff;
+  --white:     #eef4fb;
+  --muted:     #7891ab;
+  --green:     #3ee08a;
+  --orange:    #ff9f5a;
+  --red:       #ff5c7a;
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --radius:    20px;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Rajdhani', sans-serif;
+  background: var(--bg-deep);
+  color: var(--white);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--cyan); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+/* ============================================================
+   2. COSMIC BACKGROUND — starfield + rotating black hole
+============================================================ */
+#starfield { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+
+.star {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  animation: twinkle var(--d, 3s) ease-in-out infinite var(--dl, 0s);
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.08; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.35); }
+}
+
+.shoot {
+  position: absolute;
+  width: 140px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.85), transparent);
+  animation: shooting var(--sd, 9s) linear infinite var(--sdl, 0s);
+  opacity: 0;
+  border-radius: 2px;
+}
+
+@keyframes shooting {
+  0%   { transform: translate(-200px, 0) rotate(-25deg); opacity: 0; }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { transform: translate(110vw, 180px) rotate(-25deg); opacity: 0; }
+}
+
+.blackhole-wrap {
+  position: fixed;
+  top: 44%;
+  left: 50%;
+  width: 880px;
+  height: 880px;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.8;
+  filter: drop-shadow(0 0 60px rgba(255, 170, 90, 0.12));
+}
+
+.blackhole-wrap svg { width: 100%; height: 100%; display: block; }
+
+@media (prefers-reduced-motion: reduce) {
+  .blackhole-wrap animateTransform { display: none; }
+}
+
+/* ============================================================
+   3. LAYOUT
+============================================================ */
+.wrapper {
+  position: relative;
+  z-index: 1;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 14px 48px;
+}
+
+/* ============================================================
+   4. HEADER + LANGUAGE SWITCH
+============================================================ */
+.header {
+  text-align: center;
+  padding: 34px 0 22px;
+  animation: fadeDown 0.9s ease both;
+}
+
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.header-rocket {
+  font-size: 46px;
+  display: block;
+  margin-bottom: 8px;
+  animation: float 3.4s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-9px); }
+}
+
+.header-title {
+  font-family: 'Orbitron', monospace;
+  font-weight: 900;
+  font-size: clamp(28px, 9vw, 44px);
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--cyan) 0%, var(--blue) 60%, #8fb8ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 22px rgba(79, 216, 255, 0.45));
+}
+
+.header-sub {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 2.5px;
+  margin-top: 6px;
+}
+
+.lang-switch {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: 18px;
+  padding: 4px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: 30px;
+  backdrop-filter: blur(12px);
+}
+
+.lang-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 1px;
+  padding: 6px 14px;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.lang-btn.active {
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+  color: #04101c;
+}
+
+/* ============================================================
+   5. GLASS CARDS (liquid glass)
+============================================================ */
+.card {
+  --mx: 50%;
+  --my: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 22px 18px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
+  animation: fadeUp 0.7s ease both;
+  transition: transform 0.15s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  will-change: transform;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  background: radial-gradient(circle at var(--mx) var(--my), rgba(255,255,255,0.10), transparent 55%);
+  pointer-events: none;
+  transition: opacity 0.3s;
+  opacity: 0;
+}
+
+.card:hover::before { opacity: 1; }
+
+.card:hover {
+  border-color: rgba(79, 216, 255, 0.35);
+  box-shadow: 0 12px 44px rgba(0,0,0,0.45), 0 0 30px rgba(79,216,255,0.08), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.card:nth-child(1) { animation-delay: 0.08s; }
+.card:nth-child(2) { animation-delay: 0.2s; }
+.card:nth-child(3) { animation-delay: 0.32s; }
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.card-icon { font-size: 21px; }
+
+.card-title {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(12.5px, 4vw, 15px);
+  font-weight: 700;
+  color: var(--white);
+  letter-spacing: 0.5px;
+}
+
+.live-badge {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(62, 224, 138, 0.1);
+  border: 1px solid rgba(62, 224, 138, 0.3);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 1px;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: pulse-dot 1.2s ease-in-out infinite;
+  box-shadow: 0 0 6px var(--green);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.5); opacity: 0.5; }
+}
+
+/* ============================================================
+   6. ISS MAP
+============================================================ */
+#map {
+  width: 100%;
+  height: 260px;
+  border-radius: 14px;
+  border: 1px solid rgba(79,216,255,0.18);
+  overflow: hidden;
+  background: #060d18;
+}
+
+.iss-coords { display: flex; gap: 10px; margin-top: 12px; }
+
+.coord-box {
+  background: var(--bg-inner);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  text-align: center;
+  flex: 1;
+}
+
+.coord-label { font-size: 10.5px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+.coord-value { font-family: 'Orbitron', monospace; font-size: 14px; font-weight: 700; color: var(--cyan); margin-top: 2px; }
+
+.iss-speed { text-align: center; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.iss-speed span { color: var(--green); font-weight: 700; font-family: 'Orbitron', monospace; }
+
+.iss-marker-icon {
+  font-size: 26px;
+  filter: drop-shadow(0 0 6px rgba(79,216,255,0.85));
+  animation: rotate-slow 9s linear infinite;
+}
+
+@keyframes rotate-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* ============================================================
+   7. NASA APOD
+============================================================ */
+#apod-container { text-align: center; }
+
+#apod-img-wrap {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(47,127,255,0.25);
+  background: var(--bg-inner);
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#apod-img { width: 100%; display: block; border-radius: 14px; transition: transform 0.4s ease; }
+#apod-img:hover { transform: scale(1.015); }
+
+#apod-video-wrap { width: 100%; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; }
+#apod-video-wrap iframe { width: 100%; height: 100%; border: none; border-radius: 14px; }
+
+.apod-title {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(12px, 3.5vw, 15px);
+  font-weight: 700;
+  color: var(--white);
+  margin: 14px 0 6px;
+  line-height: 1.4;
+}
+
+.apod-date-badge {
+  display: inline-block;
+  background: rgba(47,127,255,0.12);
+  border: 1px solid rgba(47,127,255,0.3);
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+
+.apod-explanation {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.65;
+  text-align: left;
+  max-height: 80px;
+  overflow: hidden;
+  position: relative;
+  transition: max-height 0.5s ease;
+}
+
+.apod-explanation.expanded { max-height: 1000px; }
+
+.apod-explanation::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 32px;
+  background: linear-gradient(transparent, rgba(8,14,24,0.9));
+  transition: opacity 0.3s;
+}
+
+.apod-explanation.expanded::after { opacity: 0; }
+
+.apod-translated-tag {
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+  font-style: italic;
+  margin-top: 6px;
+  display: block;
+}
+
+.apod-read-more {
+  background: none;
+  border: none;
+  color: var(--cyan);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 6px;
+  letter-spacing: 1px;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.spinner {
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(79,216,255,0.15);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing: 1px; }
+
+.error-box {
+  background: rgba(255,92,122,0.08);
+  border: 1px solid rgba(255,92,122,0.25);
+  border-radius: 10px;
+  padding: 14px;
+  color: #ff97ac;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ============================================================
+   8. ROCKET LAUNCHES
+============================================================ */
+#launches-list { display: flex; flex-direction: column; gap: 10px; }
+
+.launch-item {
+  background: var(--bg-inner);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-left: 3px solid var(--cyan);
+  border-radius: 12px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: start;
+  transition: border-color 0.3s, transform 0.2s;
+  animation: fadeUp 0.5s ease both;
+}
+
+.launch-item:hover { border-color: rgba(79,216,255,0.35); transform: translateX(3px); }
+.launch-item.upcoming { border-left-color: var(--green); }
+.launch-item.tbd      { border-left-color: var(--orange); }
+.launch-item.hold     { border-left-color: var(--red); }
+
+.launch-name {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(11px, 3.2vw, 12.5px);
+  font-weight: 700;
+  color: var(--white);
+  line-height: 1.4;
+  grid-column: 1 / -1;
+}
+
+.launch-info { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.launch-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.launch-tag .icon { font-size: 13px; }
+
+.launch-status {
+  display: inline-block;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.status-go   { background: rgba(62,224,138,0.12); color: var(--green);  border: 1px solid rgba(62,224,138,0.3); }
+.status-tbd  { background: rgba(255,159,90,0.12); color: var(--orange); border: 1px solid rgba(255,159,90,0.3); }
+.status-hold { background: rgba(255,92,122,0.12); color: var(--red);   border: 1px solid rgba(255,92,122,0.3); }
+
+/* ============================================================
+   9. CONTACT / SUBSCRIBE BUTTON
+============================================================ */
+.contact-section { text-align: center; margin: 28px 0 18px; animation: fadeUp 0.7s ease 0.5s both; }
+
+.contact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, rgba(79,216,255,0.14), rgba(47,127,255,0.14));
+  border: 1.5px solid var(--cyan);
+  color: var(--cyan);
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(11px, 3.5vw, 13.5px);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  padding: 14px 26px;
+  border-radius: 50px;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 20px rgba(79,216,255,0.12);
+  position: relative;
+  overflow: hidden;
+}
+
+.contact-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(79,216,255,0.22), rgba(47,127,255,0.22));
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.contact-btn:hover::before { opacity: 1; }
+.contact-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 30px rgba(79,216,255,0.3); border-color: #fff; color: #fff; }
+.contact-btn:active { transform: translateY(0); }
+.contact-btn-icon { font-size: 19px; }
+
+/* ============================================================
+   10. FOOTER
+============================================================ */
+.footer { text-align: center; padding: 16px 0 8px; animation: fadeUp 0.7s ease 0.65s both; }
+
+.footer-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(79,216,255,0.22), transparent);
+  margin-bottom: 16px;
+}
+
+.dev-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(10px, 3vw, 12.5px);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--cyan);
+  transition: all 0.3s;
+  padding: 8px 18px;
+  border: 1px solid rgba(79,216,255,0.22);
+  border-radius: 30px;
+  background: rgba(79,216,255,0.05);
+}
+
+.dev-link:hover { color: #fff; border-color: var(--cyan); background: rgba(79,216,255,0.12); transform: scale(1.03); }
+
+.dev-dot {
+  width: 9px;
+  height: 9px;
+  background: var(--green);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.footer-copy { margin-top: 12px; font-size: 11px; color: var(--muted); letter-spacing: 1.5px; }
+
+.visitor-badge { margin-top: 12px; display: flex; justify-content: center; opacity: 0.85; }
+.visitor-badge img { border-radius: 8px; height: 20px; }
+
+/* ============================================================
+   11. LEAFLET DARK OVERRIDE
+============================================================ */
+.leaflet-container { background: #050c17 !important; }
+.leaflet-tile { filter: brightness(0.72) saturate(0.75) hue-rotate(190deg); }
+
+/* ============================================================
+   12. SCROLLBAR
+============================================================ */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: rgba(79,216,255,0.3); border-radius: 4px; }
+
+/* ============================================================
+   13. MISC
+============================================================ */
+.section-note { font-size: 12px; color: var(--muted); letter-spacing: 1px; margin-bottom: 12px; }
+
+.update-bar { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; font-size: 11px; color: var(--muted); letter-spacing: 0.5px; }
+.update-progress { flex: 1; height: 2px; background: rgba(79,216,255,0.1); border-radius: 2px; margin: 0 10px; overflow: hidden; }
+.update-fill { height: 100%; background: linear-gradient(90deg, var(--cyan), var(--blue)); border-radius: 2px; width: 0%; transition: width 0.5s linear; }
+
+a:focus-visible, button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+
+@media (max-width: 380px) {
+  .wrapper { padding: 0 10px 36px; }
+  .card    { padding: 16px 13px; }
+  #map     { height: 220px; }
+  .blackhole-wrap { width: 600px; height: 600px; }
+}
+</style>
+</head>
+<body>
+
+<div id="starfield"></div>
+<div class="blackhole-wrap" aria-hidden="true">
+  <svg viewBox="0 0 800 800">
+    <defs>
+      <radialGradient id="diskGlow" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"  stop-color="#fff3d6" stop-opacity="0.75"/>
+        <stop offset="40%" stop-color="#ffab55" stop-opacity="0.45"/>
+        <stop offset="100%" stop-color="#ff7a33" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="diskMid" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"  stop-color="#fff8ec" stop-opacity="0.95"/>
+        <stop offset="35%" stop-color="#ffc884" stop-opacity="0.75"/>
+        <stop offset="100%" stop-color="#ff8c42" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="diskCore" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"  stop-color="#fffdf8" stop-opacity="1"/>
+        <stop offset="30%" stop-color="#ffe0a6" stop-opacity="0.95"/>
+        <stop offset="100%" stop-color="#ff9a4d" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="ringGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"  stop-color="#ffe9c2" stop-opacity="0.25"/>
+        <stop offset="45%" stop-color="#fffaf0" stop-opacity="0.95"/>
+        <stop offset="100%" stop-color="#ffb15c" stop-opacity="1"/>
+      </linearGradient>
+      <filter id="blurSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="20"/></filter>
+      <filter id="blurMid"  x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+      <filter id="blurSharp" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
+      <filter id="blurTiny" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+    </defs>
+
+    <!-- lensed light arcing over the top and under the bottom of the sphere -->
+    <path d="M 235 330 A 165 70 0 0 1 565 330" fill="none" stroke="url(#ringGrad)" stroke-width="4" opacity="0.35" filter="url(#blurTiny)"/>
+    <path d="M 235 470 A 165 70 0 0 0 565 470" fill="none" stroke="url(#ringGrad)" stroke-width="4" opacity="0.35" filter="url(#blurTiny)"/>
+
+    <!-- outer soft glow of the tilted accretion disk -->
+    <ellipse cx="400" cy="400" rx="378" ry="92" fill="url(#diskGlow)" filter="url(#blurSoft)" opacity="0.6">
+      <animateTransform attributeName="transform" type="rotate" from="0 400 400" to="360 400 400" dur="90s" repeatCount="indefinite"/>
+    </ellipse>
+
+    <!-- mid brightness band -->
+    <ellipse cx="400" cy="400" rx="300" ry="58" fill="url(#diskMid)" filter="url(#blurMid)" opacity="0.85">
+      <animateTransform attributeName="transform" type="rotate" from="0 400 400" to="-360 400 400" dur="60s" repeatCount="indefinite"/>
+    </ellipse>
+
+    <!-- bright hot core band -->
+    <ellipse cx="400" cy="400" rx="228" ry="26" fill="url(#diskCore)" filter="url(#blurSharp)" opacity="0.95">
+      <animateTransform attributeName="transform" type="rotate" from="0 400 400" to="360 400 400" dur="42s" repeatCount="indefinite"/>
+    </ellipse>
+
+    <!-- photon ring hugging the horizon -->
+    <circle cx="400" cy="400" r="152" fill="none" stroke="url(#ringGrad)" stroke-width="9" filter="url(#blurTiny)" opacity="0.95">
+      <animateTransform attributeName="transform" type="rotate" from="0 400 400" to="360 400 400" dur="26s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- static event horizon, painted last so the disk reads as passing behind it -->
+    <circle cx="400" cy="400" r="140" fill="#010103"/>
+    <circle cx="400" cy="400" r="140" fill="none" stroke="rgba(255,235,205,0.08)" stroke-width="1"/>
+  </svg>
+</div>
+
+<div class="wrapper">
+
+  <header class="header">
+    <span class="header-rocket">🚀</span>
+    <h1 class="header-title">Space Tracker</h1>
+    <p class="header-sub" data-i18n="appSub">Koinot kuzatuvchisi · Real vaqt</p>
+    <div class="lang-switch" role="group" aria-label="Til tanlash">
+      <button class="lang-btn active" data-lang="uz" onclick="setLang('uz')">UZ</button>
+      <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" data-lang="ru" onclick="setLang('ru')">RU</button>
+    </div>
+  </header>
+
+  <!-- ===== CARD 1: ISS ===== -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🛰️</span>
+      <span class="card-title" data-i18n="issTitle">Xalqaro Koinot Stansiyasi (ISS)</span>
+      <span class="live-badge"><span class="live-dot"></span><span data-i18n="live">JONLI</span></span>
+    </div>
+
+    <p class="section-note" data-i18n="mapNote">Hozirgi joylashuvi xaritada:</p>
+    <div id="map"></div>
+
+    <div class="iss-coords">
+      <div class="coord-box">
+        <div class="coord-label" data-i18n="latLabel">Kenglik</div>
+        <div class="coord-value" id="iss-lat">—</div>
+      </div>
+      <div class="coord-box">
+        <div class="coord-label" data-i18n="lonLabel">Uzunlik</div>
+        <div class="coord-value" id="iss-lon">—</div>
+      </div>
+      <div class="coord-box">
+        <div class="coord-label" data-i18n="altLabel">Balandlik</div>
+        <div class="coord-value" id="iss-alt">—</div>
+      </div>
+    </div>
+
+    <p class="iss-speed"><span data-i18n="speedText">Tezlik:</span> <span id="iss-speed">—</span> km/soat</p>
+
+    <div class="update-bar">
+      <span data-i18n="nextUpdate">Keyingi yangilanish</span>
+      <div class="update-progress"><div class="update-fill" id="iss-update-fill"></div></div>
+      <span id="iss-update-sec">5s</span>
+    </div>
+  </div>
+
+  <!-- ===== CARD 2: NASA APOD ===== -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🌌</span>
+      <span class="card-title" data-i18n="apodTitle">Kunning Astronomik Surati (NASA)</span>
+    </div>
+
+    <div id="apod-container">
+      <div id="apod-loading" style="padding:30px 0;">
+        <div class="spinner"></div>
+        <p class="loading-text" data-i18n="loadingText">Yuklanmoqda...</p>
+      </div>
+      <div id="apod-content" style="display:none;"></div>
+      <div id="apod-error" class="error-box" style="display:none;" data-i18n="errorText">Maʼlumot yuklab boʻlmadi. Birozdan soʻng qaytadan urinib koʻring.</div>
+    </div>
+  </div>
+
+  <!-- ===== CARD 3: ROCKET LAUNCHES ===== -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🚀</span>
+      <span class="card-title" data-i18n="launchesTitle">Raketalar Uchirilishi</span>
+    </div>
+    <div id="launches-list">
+      <div id="launches-loading" style="padding:20px 0; text-align:center;">
+        <div class="spinner"></div>
+        <p class="loading-text" data-i18n="loadingText">Yuklanmoqda...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CONTACT / SUBSCRIBE ===== -->
+  <div class="contact-section">
+    <a class="contact-btn" href="https://t.me/Koinot_Rasmlari_Va_Videolari" target="_blank" rel="noopener">
+      <span class="contact-btn-icon">📡</span>
+      <span data-i18n="contactBtn">Kanalimizga obuna boʻling</span>
+    </a>
+  </div>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <div class="footer-divider"></div>
+    <a class="dev-link" href="https://t.me/Ibrohimov_exe" target="_blank" rel="noopener">
+      <span class="dev-dot"></span>
+      <span data-i18n="devLabel">Dasturchi:</span>&nbsp;@Ibrohimov_exe
+    </a>
+    <p class="footer-copy" data-i18n="footerCopy">© 2026 Space Tracker · Barcha huquqlar himoyalangan</p>
+    <div class="visitor-badge">
+      <img src="https://visitor-badge.laobi.icu/badge?page_id=ibrohimov.space-tracker&left_color=0b1520&right_color=2f7fff" alt="visitors" loading="lazy" />
+    </div>
+  </footer>
+
+</div>
+
+<script>
+/* ============================================================
+   0. STARFIELD + SHOOTING STARS
+============================================================ */
+(function initStars(){
+  const field = document.getElementById('starfield');
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < 130; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const size = Math.random() * 2 + 0.6;
+    s.style.width = size + 'px';
+    s.style.height = size + 'px';
+    s.style.top = Math.random() * 100 + '%';
+    s.style.left = Math.random() * 100 + '%';
+    s.style.setProperty('--d', (2 + Math.random() * 4) + 's');
+    s.style.setProperty('--dl', (Math.random() * 5) + 's');
+    frag.appendChild(s);
+  }
+  for (let i = 0; i < 4; i++) {
+    const sh = document.createElement('div');
+    sh.className = 'shoot';
+    sh.style.top = (Math.random() * 50) + '%';
+    sh.style.left = (Math.random() * 20) + '%';
+    sh.style.setProperty('--sd', (6 + Math.random() * 6) + 's');
+    sh.style.setProperty('--sdl', (Math.random() * 12) + 's');
+    frag.appendChild(sh);
+  }
+  field.appendChild(frag);
+})();
+
+/* ============================================================
+   0b. GLASS CARD PARALLAX / SHINE
+============================================================ */
+(function initGlassParallax(){
+  const cards = document.querySelectorAll('.card');
+  cards.forEach(card => {
+    card.addEventListener('mousemove', (e) => {
+      const r = card.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      card.style.setProperty('--mx', x + 'px');
+      card.style.setProperty('--my', y + 'px');
+      const cx = r.width / 2, cy = r.height / 2;
+      const rotX = ((y - cy) / cy) * -3;
+      const rotY = ((x - cx) / cx) * 3;
+      card.style.transform = `perspective(900px) rotateX(${rotX}deg) rotateY(${rotY}deg) translateY(-2px)`;
+    });
+    card.addEventListener('mouseleave', () => { card.style.transform = ''; });
+  });
+})();
+
+/* ============================================================
+   1. I18N
+============================================================ */
+const translations = {
+  uz: {
+    appSub: "Koinot kuzatuvchisi · Real vaqt",
+    issTitle: "Xalqaro Koinot Stansiyasi (ISS)",
+    live: "JONLI",
+    mapNote: "Hozirgi joylashuvi xaritada:",
+    latLabel: "Kenglik",
+    lonLabel: "Uzunlik",
+    altLabel: "Balandlik",
+    speedText: "Tezlik:",
+    nextUpdate: "Keyingi yangilanish",
+    apodTitle: "Kunning Astronomik Surati (NASA)",
+    readMore: "Batafsil",
+    readLess: "Yopish",
+    launchesTitle: "Raketalar Uchirilishi",
+    statusGo: "Tasdiqlangan",
+    statusTbd: "Aniqlanmoqda",
+    statusHold: "Toʻxtatilgan",
+    launchDate: "Sana:",
+    launchPad: "Maydon:",
+    contactBtn: "Kanalimizga obuna boʻling",
+    devLabel: "Dasturchi:",
+    footerCopy: "© 2026 Space Tracker · Barcha huquqlar himoyalangan",
+    loadingText: "Yuklanmoqda...",
+    errorText: "Maʼlumot yuklab boʻlmadi. Birozdan soʻng qaytadan urinib koʻring.",
+    translatedTag: "(avtomatik tarjima)"
+  },
+  en: {
+    appSub: "Space Tracker · Real-time",
+    issTitle: "International Space Station (ISS)",
+    live: "LIVE",
+    mapNote: "Current location on the map:",
+    latLabel: "Latitude",
+    lonLabel: "Longitude",
+    altLabel: "Altitude",
+    speedText: "Speed:",
+    nextUpdate: "Next update",
+    apodTitle: "Astronomy Picture of the Day (NASA)",
+    readMore: "Read more",
+    readLess: "Show less",
+    launchesTitle: "Rocket Launches",
+    statusGo: "Go",
+    statusTbd: "TBD",
+    statusHold: "Hold",
+    launchDate: "Date:",
+    launchPad: "Pad:",
+    contactBtn: "Subscribe to our channel",
+    devLabel: "Developer:",
+    footerCopy: "© 2026 Space Tracker · All rights reserved",
+    loadingText: "Loading...",
+    errorText: "Couldn't load data. Please try again shortly.",
+    translatedTag: ""
+  },
+  ru: {
+    appSub: "Трекер космоса · В реальном времени",
+    issTitle: "Международная космическая станция (МКС)",
+    live: "ЭФИР",
+    mapNote: "Текущее местоположение на карте:",
+    latLabel: "Широта",
+    lonLabel: "Долгота",
+    altLabel: "Высота",
+    speedText: "Скорость:",
+    nextUpdate: "Следующее обновление",
+    apodTitle: "Астрономическая картинка дня (NASA)",
+    readMore: "Подробнее",
+    readLess: "Свернуть",
+    launchesTitle: "Запуски ракет",
+    statusGo: "Подтверждён",
+    statusTbd: "Уточняется",
+    statusHold: "Приостановлен",
+    launchDate: "Дата:",
+    launchPad: "Площадка:",
+    contactBtn: "Подпишитесь на наш канал",
+    devLabel: "Разработчик:",
+    footerCopy: "© 2026 Space Tracker · Все права защищены",
+    loadingText: "Загрузка...",
+    errorText: "Не удалось загрузить данные. Попробуйте снова чуть позже.",
+    translatedTag: "(автоматический перевод)"
+  }
+};
+
+let currentLang = localStorage.getItem('st_lang') || 'uz';
+
+function t(key) { return translations[currentLang][key] ?? translations.en[key] ?? key; }
+
+function applyStaticTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.documentElement.lang = currentLang;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === currentLang));
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('st_lang', lang);
+  applyStaticTranslations();
+  renderApod();       // re-render with (possibly cached) translation
+  renderLaunches();   // status labels depend on language
+}
+
+/* ============================================================
+   2. ISS LIVE TRACKER
+============================================================ */
+let issMap, issMarker;
+const ISS_ICON = L.divIcon({
+  html: '<div class="iss-marker-icon">🛰️</div>',
+  className: '',
+  iconSize: [30, 30],
+  iconAnchor: [15, 15]
+});
+
+function initIssMap() {
+  issMap = L.map('map', {
+    zoomControl: false,
+    attributionControl: false,
+    worldCopyJump: true
+  }).setView([0, 0], 2);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 8,
+    minZoom: 2
+  }).addTo(issMap);
+
+  issMarker = L.marker([0, 0], { icon: ISS_ICON }).addTo(issMap);
+}
+
+async function updateIssPosition() {
+  try {
+    const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+    if (!res.ok) throw new Error('ISS API error');
+    const data = await res.json();
+
+    document.getElementById('iss-lat').textContent = data.latitude.toFixed(2) + '°';
+    document.getElementById('iss-lon').textContent = data.longitude.toFixed(2) + '°';
+    document.getElementById('iss-alt').textContent = Math.round(data.altitude) + ' km';
+    document.getElementById('iss-speed').textContent = Math.round(data.velocity).toLocaleString();
+
+    issMarker.setLatLng([data.latitude, data.longitude]);
+    issMap.panTo([data.latitude, data.longitude], { animate: true, duration: 1 });
+  } catch (e) {
+    console.error('ISS fetch failed', e);
+  }
+}
+
+function startIssPolling(intervalSec = 5) {
+  let remaining = intervalSec;
+  const fill = document.getElementById('iss-update-fill');
+  const label = document.getElementById('iss-update-sec');
+
+  updateIssPosition();
+
+  setInterval(() => {
+    remaining -= 0.2;
+    if (remaining <= 0) {
+      remaining = intervalSec;
+      updateIssPosition();
+    }
+    const pct = 100 - (remaining / intervalSec) * 100;
+    fill.style.width = pct + '%';
+    label.textContent = Math.ceil(remaining) + 's';
+  }, 200);
+}
+
+/* ============================================================
+   3. NASA APOD (+ auto-translation)
+============================================================ */
+const NASA_API_KEY = 'DEMO_KEY'; // 30 req/hr, 50/day — get a free key at api.nasa.gov for production use
+let apodData = null;
+const apodTranslationCache = { en: null, uz: null, ru: null };
+
+async function fetchApod() {
+  try {
+    const res = await fetch(`https://api.nasa.gov/planetary/apod?api_key=${NASA_API_KEY}`);
+    if (!res.ok) throw new Error('APOD API error');
+    apodData = await res.json();
+    apodTranslationCache.en = { title: apodData.title, explanation: apodData.explanation };
+    document.getElementById('apod-loading').style.display = 'none';
+    document.getElementById('apod-content').style.display = 'block';
+    renderApod();
+  } catch (e) {
+    console.error('APOD fetch failed', e);
+    document.getElementById('apod-loading').style.display = 'none';
+    document.getElementById('apod-error').style.display = 'block';
+  }
+}
+
+function chunkText(text, maxLen) {
+  const sentences = text.match(/[^.!?]+[.!?]*/g) || [text];
+  const chunks = [];
+  let current = '';
+  for (const s of sentences) {
+    if ((current + s).length > maxLen) {
+      if (current) chunks.push(current.trim());
+      current = s;
+    } else {
+      current += s;
+    }
+  }
+  if (current) chunks.push(current.trim());
+  return chunks;
+}
+
+async function translateViaMyMemory(text, targetLang) {
+  const chunks = chunkText(text, 450);
+  const out = [];
+  for (const chunk of chunks) {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=en|${targetLang}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    out.push(data?.responseData?.translatedText || chunk);
+  }
+  return out.join(' ');
+}
+
+async function getApodInLang(lang) {
+  if (apodTranslationCache[lang]) return apodTranslationCache[lang];
+  if (!apodData) return null;
+  try {
+    const [title, explanation] = await Promise.all([
+      translateViaMyMemory(apodData.title, lang),
+      translateViaMyMemory(apodData.explanation, lang)
+    ]);
+    apodTranslationCache[lang] = { title, explanation };
+    return apodTranslationCache[lang];
+  } catch (e) {
+    console.error('Translation failed, falling back to English', e);
+    return apodTranslationCache.en;
+  }
+}
+
+async function renderApod() {
+  if (!apodData) return;
+  const container = document.getElementById('apod-content');
+  const localized = (await getApodInLang(currentLang)) || apodTranslationCache.en;
+
+  const mediaHtml = apodData.media_type === 'video'
+    ? `<div id="apod-video-wrap"><iframe src="${apodData.url}" allowfullscreen title="APOD video"></iframe></div>`
+    : `<div id="apod-img-wrap"><img id="apod-img" src="${apodData.url}" alt="${localized.title}" loading="lazy" /></div>`;
+
+  container.innerHTML = `
+    ${mediaHtml}
+    <div class="apod-title">${localized.title}</div>
+    <div class="apod-date-badge">${apodData.date}</div>
+    <div class="apod-explanation" id="apod-expl">${localized.explanation}</div>
+    ${currentLang !== 'en' ? `<span class="apod-translated-tag">${t('translatedTag')}</span>` : ''}
+    <br/>
+    <button class="apod-read-more" id="apod-toggle">${t('readMore')}</button>
+  `;
+
+  document.getElementById('apod-toggle').addEventListener('click', () => {
+    const expl = document.getElementById('apod-expl');
+    const btn = document.getElementById('apod-toggle');
+    const isExpanded = expl.classList.toggle('expanded');
+    btn.textContent = isExpanded ? t('readLess') : t('readMore');
+  });
+}
+
+/* ============================================================
+   4. ROCKET LAUNCHES
+============================================================ */
+let launchesData = null;
+
+async function fetchLaunches() {
+  try {
+    const res = await fetch('https://ll.thespacedevs.com/2.2.0/launch/upcoming/?limit=5&mode=normal');
+    if (!res.ok) throw new Error('Launch Library API error');
+    const data = await res.json();
+    launchesData = data.results;
+    renderLaunches();
+  } catch (e) {
+    console.error('Launches fetch failed', e);
+    document.getElementById('launches-list').innerHTML = `<div class="error-box">${t('errorText')}</div>`;
+  }
+}
+
+function statusClass(abbrev) {
+  if (['Go', 'Success'].includes(abbrev)) return { cls: 'go', item: 'upcoming', label: t('statusGo') };
+  if (['TBD', 'TBC'].includes(abbrev)) return { cls: 'tbd', item: 'tbd', label: t('statusTbd') };
+  return { cls: 'hold', item: 'hold', label: t('statusHold') };
+}
+
+function renderLaunches() {
+  if (!launchesData) return;
+  const list = document.getElementById('launches-list');
+
+  list.innerHTML = launchesData.map(launch => {
+    const st = statusClass(launch.status?.abbrev);
+    const date = new Date(launch.net);
+    const dateStr = date.toLocaleDateString(currentLang === 'uz' ? 'en-GB' : currentLang, {
+      day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+    const pad = launch.pad?.name || '—';
+
+    return `
+      <div class="launch-item ${st.item}">
+        <div class="launch-name">${launch.name}</div>
+        <div class="launch-info">
+          <span class="launch-tag"><span class="icon">🗓️</span> ${t('launchDate')} ${dateStr}</span>
+        </div>
+        <div class="launch-info">
+          <span class="launch-tag"><span class="icon">📍</span> ${t('launchPad')} ${pad}</span>
+        </div>
+        <span class="launch-status status-${st.cls}">${st.label}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ============================================================
+   5. BOOT
+============================================================ */
+window.addEventListener('DOMContentLoaded', () => {
+  applyStaticTranslations();
+  initIssMap();
+  startIssPolling(5);
+  fetchApod();
+  fetchLaunches();
+});
+</script>
+</body>
+</html>
